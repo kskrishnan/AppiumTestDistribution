@@ -2,15 +2,30 @@ package com.appium.manager;
 
 import com.appium.executor.MyTestExecutor;
 import com.appium.ios.IOSDeviceConfiguration;
+import com.github.lalyos.jfiglet.FigletFont;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.filefilter.TrueFileFilter;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+
+
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 
 /*
  * This class picks the devices connected
@@ -31,11 +46,18 @@ public class ParallelThread {
     public InputStream input = null;
     List<Class> testcases;
 
+    public ParallelThread() throws IOException {
+        input = new FileInputStream("config.properties");
+        prop.load(input);
+    }
+
     public void runner(String pack, List<String> tests) throws Exception {
+        figlet(prop.getProperty("RUNNER"));
         triggerTest(pack, tests);
     }
 
     public void runner(String pack) throws Exception {
+        figlet(prop.getProperty("RUNNER"));
         List<String> test = new ArrayList<>();
         triggerTest(pack, test);
     }
@@ -58,12 +80,10 @@ public class ParallelThread {
             }
         }
 
-        input = new FileInputStream("config.properties");
-        prop.load(input);
 
         if (deviceConf.getDevices() != null) {
             devices = deviceConf.getDevices();
-            deviceCount = devices.size() / 3;
+            deviceCount = devices.size() / 4;
             File adb_logs = new File(System.getProperty("user.dir") + "/target/adblogs/");
             if (!adb_logs.exists()) {
                 System.out.println("creating directory: " + "ADBLogs");
@@ -87,10 +107,12 @@ public class ParallelThread {
 
         }
         if (deviceCount == 0) {
+            figlet("No Android Devices Online");
             System.exit(0);
         }
-
-        System.out.println("Total Number of devices detected::" + deviceCount);
+        System.out.println("***************************************************\n");
+        System.out.println("Total Number of devices detected::" + deviceCount + "\n");
+        System.out.println("***************************************************\n");
         System.out.println("starting running tests in threads");
 
         testcases = new ArrayList<Class>();
@@ -99,7 +121,7 @@ public class ParallelThread {
             // final String pack = "com.paralle.tests"; // Or any other package
             PackageUtil.getClasses(pack).stream().forEach(s -> {
                 if (s.toString().contains("Test")) {
-                    System.out.println("forEach: " + testcases.add((Class) s));
+                    testcases.add((Class) s);
                 }
             });
 
@@ -124,21 +146,21 @@ public class ParallelThread {
     }
 
     public void createSnapshotFolderAndroid(int deviceCount, String platform) throws Exception {
-        for (int i = 1; i <= (devices.size() / 3); i++) {
+        for (int i = 1; i <= (devices.size() / 4); i++) {
             String deviceSerial = devices.get("deviceID" + i);
-            createPlatformDirectory(platform);
-            File file = new File(
-                System.getProperty("user.dir") + "/target/screenshot/" + platform + "/"
-                    + deviceSerial.replaceAll("\\W", "_"));
-            if (!file.exists()) {
-                if (file.mkdir()) {
-                    System.out.println("Android " + deviceSerial + " Directory is created!");
-                } else {
-                    System.out.println("Failed to create directory!");
+            if (deviceSerial != null) {
+                createPlatformDirectory(platform);
+                File file = new File(
+                    System.getProperty("user.dir") + "/target/screenshot/" + platform + "/"
+                        + deviceSerial.replaceAll("\\W", "_"));
+                if (!file.exists()) {
+                    if (file.mkdir()) {
+                        System.out.println("Android " + deviceSerial + " Directory is created!");
+                    } else {
+                        System.out.println("Failed to create directory!");
+                    }
                 }
             }
-
-
         }
     }
 
@@ -204,5 +226,15 @@ public class ParallelThread {
             lines.add(12, "plugin = {\"com.cucumber.listener.ExtentCucumberFormatter:\"},");
             Files.write(path, lines, StandardCharsets.UTF_8);
         }
+    }
+
+    public static void figlet(String text) {
+        String asciiArt1 = null;
+        try {
+            asciiArt1 = FigletFont.convertOneLine(text);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        System.out.println(asciiArt1);
     }
 }

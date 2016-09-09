@@ -44,15 +44,7 @@ public class AndroidDeviceConfiguration {
         String[] lines = output.split("\n");
 
         if (lines.length <= 1) {
-            System.out.println(
-                "\uD83C\uDF7A" + "\uD83C\uDF7A" + "\uD83C\uDF7A" + "\uD83C\uDF7A" + "\uD83C\uDF7A"
-                    + "\uD83C\uDF7A" + "\uD83C\uDF7A" + "\uD83C\uDF7A" + "\uD83C\uDF7A"
-                    + "\uD83C\uDF7A" + "\uD83C\uDF7A" + "\uD83C\uDF7A");
             System.out.println("No Device Connected");
-            System.out.println(
-                "\uD83C\uDF7A" + "\uD83C\uDF7A" + "\uD83C\uDF7A" + "\uD83C\uDF7A" + "\uD83C\uDF7A"
-                    + "\uD83C\uDF7A" + "\uD83C\uDF7A" + "\uD83C\uDF7A" + "\uD83C\uDF7A"
-                    + "\uD83C\uDF7A" + "\uD83C\uDF7A" + "\uD83C\uDF7A");
             stopADB();
             return null;
         } else {
@@ -72,10 +64,14 @@ public class AndroidDeviceConfiguration {
                         "adb -s " + deviceID + " shell getprop ro.build.version.release")
                         .replaceAll("\\s+", "");
                     String deviceName = brand + " " + model;
+                    String apiLevel =
+                        cmd.runCommand("adb -s " + deviceID + " shell getprop ro.build.version.sdk")
+                            .replaceAll("\n", "");
 
                     devices.put("deviceID" + i, deviceID);
                     devices.put("deviceName" + i, deviceName);
                     devices.put("osVersion" + i, osVersion);
+                    devices.put(deviceID, apiLevel);
                 } else if (lines[i].contains("unauthorized")) {
                     lines[i] = lines[i].replaceAll("unauthorized", "");
                     String deviceID = lines[i];
@@ -96,7 +92,6 @@ public class AndroidDeviceConfiguration {
 
         if (lines.length <= 1) {
             System.out.println("No Device Connected");
-            //			stopADB();
             return null;
         } else {
             for (int i = 1; i < lines.length; i++) {

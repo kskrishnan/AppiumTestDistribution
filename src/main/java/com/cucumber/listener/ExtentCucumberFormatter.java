@@ -8,9 +8,21 @@ import com.relevantcodes.extentreports.ExtentTest;
 import com.relevantcodes.extentreports.LogStatus;
 import com.report.factory.ExtentManager;
 import com.report.factory.ExtentTestManager;
+
+
 import gherkin.formatter.Formatter;
 import gherkin.formatter.Reporter;
-import gherkin.formatter.model.*;
+import gherkin.formatter.model.Background;
+import gherkin.formatter.model.Examples;
+import gherkin.formatter.model.Feature;
+import gherkin.formatter.model.Match;
+import gherkin.formatter.model.Result;
+import gherkin.formatter.model.Scenario;
+import gherkin.formatter.model.ScenarioOutline;
+import gherkin.formatter.model.Step;
+import gherkin.formatter.model.Tag;
+
+
 import io.appium.java_client.AppiumDriver;
 import io.appium.java_client.MobileElement;
 import org.apache.commons.io.FileUtils;
@@ -73,7 +85,17 @@ public class ExtentCucumberFormatter implements Reporter, Formatter {
         } else if ("failed".equals(result.getStatus())) {
             String failed_StepName = testSteps.poll().getName();
             ExtentTestManager.getTest().log(LogStatus.FAIL, failed_StepName, result.getError());
+            String context = getDriver().getContext();
+            boolean contextChanged = false;
+            if (getDriver().toString().split(":")[0].trim().equals("AndroidDriver") 
+                    && !context.equals("NATIVE_APP")) {
+                getDriver().context("NATIVE_APP");
+                contextChanged = true;
+            }
             File scrFile = ((TakesScreenshot) getDriver()).getScreenshotAs(OutputType.FILE);
+            if (contextChanged) {
+                getDriver().context(context);
+            }
             if (getDriver().toString().split(":")[0].trim().equals("AndroidDriver")) {
                 deviceModel = androidDevice.getDeviceModel(appiumParallelTest.device_udid);
                 screenShotAndFrame(failed_StepName, scrFile, "android");
@@ -213,11 +235,10 @@ public class ExtentCucumberFormatter implements Reporter, Formatter {
                             .contains(fileName.split(".png")[0].toLowerCase())) {
                             try {
                                 imageUtils.wrapDeviceFrames(files1[i].toString(),
-                                    System.getProperty("user.dir") +
-                                        "/target/screenshot/" + device + "/"
-                                        + appiumParallelTest.device_udid.replaceAll("\\W", "_")
-                                        + "/" + deviceModel + "/failed_" + failed_StepName
-                                        .replaceAll(" ", "_") + ".png",
+                                    System.getProperty("user.dir") + "/target/screenshot/" + device
+                                        + "/" + appiumParallelTest.device_udid
+                                        .replaceAll("\\W", "_") + "/" + deviceModel + "/failed_"
+                                        + failed_StepName.replaceAll(" ", "_") + ".png",
                                     System.getProperty("user.dir") + "/target/screenshot/" + device
                                         + "/" + appiumParallelTest.device_udid
                                         .replaceAll("\\W", "_") + "/" + deviceModel + "/failed_"
@@ -254,18 +275,16 @@ public class ExtentCucumberFormatter implements Reporter, Formatter {
                 + "/failed_" + stepName.replaceAll(" ", "_") + "_framed.png");
         if (framedImageAndroid.exists()) {
             ExtentTestManager.getTest().log(LogStatus.INFO, stepName,
-                "Snapshot below: " + ExtentTestManager.getTest()
-                    .addScreenCapture(System.getProperty("user.dir") +
-                        "/target/screenshot/" + platform + "/" + appiumParallelTest.device_udid
-                        .replaceAll("\\W", "_") + "/" + deviceModel + "/failed_" + stepName
-                        .replaceAll(" ", "_") + "_framed.png"));
+                "Snapshot below: " + ExtentTestManager.getTest().addScreenCapture(
+                    System.getProperty("user.dir") + "/target/screenshot/" + platform + "/"
+                        + appiumParallelTest.device_udid.replaceAll("\\W", "_") + "/" + deviceModel
+                        + "/failed_" + stepName.replaceAll(" ", "_") + "_framed.png"));
         } else {
             ExtentTestManager.getTest().log(LogStatus.INFO, stepName,
-                "Snapshot below: " + ExtentTestManager.getTest()
-                    .addScreenCapture(System.getProperty("user.dir") +
-                        "/target/screenshot/" + platform + "/" + appiumParallelTest.device_udid
-                        .replaceAll("\\W", "_") + "/" + deviceModel + "/failed_" + stepName
-                        .replaceAll(" ", "_") + ".png"));
+                "Snapshot below: " + ExtentTestManager.getTest().addScreenCapture(
+                    System.getProperty("user.dir") + "/target/screenshot/" + platform + "/"
+                        + appiumParallelTest.device_udid.replaceAll("\\W", "_") + "/" + deviceModel
+                        + "/failed_" + stepName.replaceAll(" ", "_") + ".png"));
         }
     }
 

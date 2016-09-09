@@ -1,7 +1,10 @@
 package com.appium.executor;
 
+import static java.util.Arrays.asList;
+
 import com.appium.cucumber.report.HtmlReporter;
 import com.appium.manager.PackageUtil;
+import com.appium.manager.ParallelThread;
 import com.appium.utils.ImageUtils;
 import org.junit.runner.JUnitCore;
 import org.junit.runner.Result;
@@ -11,7 +14,6 @@ import org.reflections.scanners.MethodAnnotationsScanner;
 import org.reflections.util.ClasspathHelper;
 import org.reflections.util.ConfigurationBuilder;
 import org.testng.TestNG;
-import org.testng.collections.Lists;
 import org.testng.xml.XmlClass;
 import org.testng.xml.XmlInclude;
 import org.testng.xml.XmlSuite;
@@ -23,12 +25,21 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.URL;
-import java.util.*;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import static java.util.Arrays.asList;
 
 public class MyTestExecutor {
     List<Thread> threads = new ArrayList<Thread>();
@@ -37,7 +48,8 @@ public class MyTestExecutor {
     public HtmlReporter reporter = new HtmlReporter();
     public ArrayList<String> items = new ArrayList<String>();
 
-    @SuppressWarnings("rawtypes") public void distributeTests(int deviceCount) {
+    @SuppressWarnings("rawtypes")
+    public void distributeTests(int deviceCount) {
         try {
             PackageUtil.getClasses("output").stream().forEach(s -> {
                 if (s.toString().contains("IT")) {
@@ -72,7 +84,8 @@ public class MyTestExecutor {
         System.out.println("ending");
     }
 
-    @SuppressWarnings("rawtypes") public void parallelTests(int deviceCount)
+    @SuppressWarnings("rawtypes")
+    public void parallelTests(int deviceCount)
         throws InterruptedException {
         try {
             PackageUtil.getClasses("output").stream().forEach(s -> {
@@ -123,27 +136,17 @@ public class MyTestExecutor {
         URL newUrl = null;
         List<URL> newUrls = new ArrayList<>();
         Collections.addAll(items, pack.split("\\s*,\\s*"));
-        if (items.size() == 1) {
-            Collection<URL> urls = ClasspathHelper.forPackage(items.get(0));
-            Iterator<URL> iter = urls.iterator();
-            URL url = iter.next();
-            urls.clear();
-            newUrl = new URL(url.toString() + items.get(0).replaceAll("\\.", "/"));
-            newUrls = Lists.newArrayList(newUrl);
-        } else if (items.size() > 1) {
-            int a = 0;
-            Collection<URL> urls = ClasspathHelper.forPackage(items.get(a));
-            Iterator<URL> iter = urls.iterator();
-            URL url = iter.next();
-            urls.clear();
-            for (int i = 0; i < items.size(); i++) {
-                newUrl = new URL(url.toString() + items.get(i).replaceAll("\\.", "/"));
-                newUrls.add(newUrl);
-                a++;
-            }
+        int a = 0;
+        Collection<URL> urls = ClasspathHelper.forPackage(items.get(a));
+        Iterator<URL> iter = urls.iterator();
+        URL url = iter.next();
+        urls.clear();
+        for (int i = 0; i < items.size(); i++) {
+            newUrl = new URL(url.toString() + items.get(i).replaceAll("\\.", "/"));
+            newUrls.add(newUrl);
+            a++;
+
         }
-
-
         Reflections reflections = new Reflections(new ConfigurationBuilder().setUrls(newUrls)
             .setScanners(new MethodAnnotationsScanner()));
         Set<Method> resources =
@@ -158,6 +161,7 @@ public class MyTestExecutor {
                 devicecount);
         }
         System.out.println("Finally complete");
+        ParallelThread.figlet("Test Completed");
         ImageUtils.creatResultsSet();
     }
 
@@ -171,7 +175,6 @@ public class MyTestExecutor {
     public void runMethodParallel(XmlSuite suite, int threadCount) {
         TestNG testNG = new TestNG();
         testNG.setXmlSuites(asList(suite));
-        System.out.println(suite.toXml());
         testNG.run();
     }
 
@@ -183,13 +186,12 @@ public class MyTestExecutor {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        XmlSuite suite = new XmlSuite();
         listeners.add("com.appium.manager.AppiumParallelTest");
         listeners.add("com.appium.utils.RetryListener");
         if (prop.getProperty("LISTENERS") != null) {
             Collections.addAll(listeners, prop.getProperty("LISTENERS").split("\\s*,\\s*"));
         }
-
+        XmlSuite suite = new XmlSuite();
         suite.setName("TestNG Forum");
         suite.setThreadCount(deviceCount);
         suite.setParallel(ParallelMode.TESTS);

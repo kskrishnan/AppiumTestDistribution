@@ -1,5 +1,7 @@
 package com.appium.manager;
 
+import com.annotation.values.Author;
+import com.annotation.values.Description;
 import com.annotation.values.SkipIf;
 import com.appium.ios.IOSDeviceConfiguration;
 import com.appium.utils.ImageUtils;
@@ -29,16 +31,29 @@ import org.testng.ITestResult;
 import org.testng.SkipException;
 import org.testng.TestListenerAdapter;
 
-import java.awt.*;
-import java.io.*;
+
+import java.awt.Image;
+import java.awt.Toolkit;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+
 import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
@@ -56,7 +71,9 @@ public class AppiumParallelTest extends TestListenerAdapter implements ITestList
     public ExtentTest child;
     public String deviceModel;
     public File scrFile = null;
+    public String testDescription = "";
     String screenShotNameWithTimeStamp;
+    private String CI_BASE_URI = null;
 
     private Map<Long, ExtentTest> parentContext = new HashMap<Long, ExtentTest>();
     private static ArrayList<String> devices = new ArrayList<String>();
@@ -120,6 +137,11 @@ public class AppiumParallelTest extends TestListenerAdapter implements ITestList
     }
 
     public synchronized AppiumServiceBuilder startAppiumServer(String methodName) throws Exception {
+        if (prop.containsKey("CI_BASE_URI")) {
+            CI_BASE_URI = prop.getProperty("CI_BASE_URI").toString().trim();
+        } else if (CI_BASE_URI == null || CI_BASE_URI.isEmpty()) {
+            CI_BASE_URI = System.getProperty("user.dir");
+        }
         device_udid = getNextAvailableDeviceId();
         if (device_udid == null) {
             System.out.println("No devices are free to run test or Failed to run test");
@@ -138,11 +160,14 @@ public class AppiumParallelTest extends TestListenerAdapter implements ITestList
         }
 
         if (prop.getProperty("FRAMEWORK").equalsIgnoreCase("testng")) {
-            parent = ExtentTestManager.startTest(methodName, "Mobile Appium Test",
+            if (getClass().getAnnotation(Description.class) != null) {
+                testDescription = getClass().getAnnotation(Description.class).value();
+            }
+            parent = ExtentTestManager.startTest(methodName, testDescription,
                 category + "_" + device_udid.replaceAll("\\W", "_"));
             parentContext.put(Thread.currentThread().getId(), parent);
             ExtentTestManager.getTest().log(LogStatus.INFO, "AppiumServerLogs",
-                "<a href=" + System.getProperty("user.dir") + "/target/appiumlogs/" + device_udid
+                "<a href=" + CI_BASE_URI + "/target/appiumlogs/" + device_udid
                     .replaceAll("\\W", "_") + "__" + methodName + ".txt" + ">Logs</a>");
         }
         if (System.getProperty("os.name").toLowerCase().contains("mac")) {
@@ -163,12 +188,48 @@ public class AppiumParallelTest extends TestListenerAdapter implements ITestList
         throws Exception {
         ExtentTestManager.loadConfig();
         if (prop.getProperty("FRAMEWORK").equalsIgnoreCase("testng")) {
-            child = ExtentTestManager.startTest(methodName.toString())
-                .assignCategory(category + "_" + device_udid.replaceAll("\\W", "_"));
+            setAuthorName(methodName);
         }
         Thread.sleep(3000);
         startingServerInstance();
         return driver;
+    }
+
+    public synchronized AppiumDriver<MobileElement> startAppiumServerInParallel(String methodName,
+        DesiredCapabilities iosCaps, DesiredCapabilities androidCaps) throws Exception {
+        ExtentTestManager.loadConfig();
+        if (prop.getProperty("FRAMEWORK").equalsIgnoreCase("testng")) {
+            setAuthorName(methodName);
+        }
+        Thread.sleep(3000);
+        startingServerInstance(iosCaps, androidCaps);
+        return driver;
+    }
+
+    public synchronized AppiumDriver<MobileElement> startAppiumServerInParallel(String methodName,
+        DesiredCapabilities caps) throws Exception {
+        ExtentTestManager.loadConfig();
+        if (prop.getProperty("FRAMEWORK").equalsIgnoreCase("testng")) {
+            setAuthorName(methodName);
+        }
+        startingServerInstance(caps);
+        return driver;
+    }
+
+    public void setAuthorName(String methodName) throws NoSuchMethodException {
+        String authorName;
+        ArrayList<String> listeners = new ArrayList<>();
+        if (getClass().getMethod(methodName).getAnnotation(Author.class) != null) {
+            authorName = getClass().getMethod(methodName).getAnnotation(Author.class).name();
+            Collections.addAll(listeners, authorName.split("\\s*,\\s*"));
+            child = ExtentTestManager
+                .startTest(methodName.toString() + " ---- AuthorName:: " + authorName)
+                .assignCategory(category + "_" + device_udid.replaceAll("\\W", "_"),
+                    "Author:" + listeners);
+        } else {
+            child = ExtentTestManager.startTest(methodName.toString())
+                .assignCategory(category + "_" + device_udid.replaceAll("\\W", "_"));
+        }
     }
 
     public void startingServerInstance() throws Exception {
@@ -187,7 +248,64 @@ public class AppiumParallelTest extends TestListenerAdapter implements ITestList
         }
     }
 
-    public void startLogResults(String methodName) throws FileNotFoundException {
+    public void startingServerInstance(DesiredCapabilities caps) throws Exception {
+        if (prop.getProperty("APP_TYPE").equalsIgnoreCase("web")) {
+            driver = new AndroidDriver<>(appiumMan.getAppiumUrl(), androidWeb());
+        } else {
+            if (System.getProperty("os.name").toLowerCase().contains("mac")) {
+                if (caps.asMap().get("bundleId") != null) {
+                    driver = new IOSDriver<>(appiumMan.getAppiumUrl(), caps);
+                } else {
+                    checkSelendroid(caps);
+                    driver = new AndroidDriver<>(appiumMan.getAppiumUrl(), caps);
+                }
+            } else {
+                driver = new AndroidDriver<>(appiumMan.getAppiumUrl(), caps);
+            }
+        }
+    }
+
+    public void startingServerInstance(DesiredCapabilities iosCaps, DesiredCapabilities androidCaps)
+        throws Exception {
+        if (prop.getProperty("APP_TYPE").equalsIgnoreCase("web")) {
+            driver = new AndroidDriver<>(appiumMan.getAppiumUrl(), androidWeb());
+        } else {
+            if (System.getProperty("os.name").toLowerCase().contains("mac")) {
+                if (iosDevice.checkiOSDevice(device_udid)) {
+                    driver = new IOSDriver<>(appiumMan.getAppiumUrl(), iosCaps);
+                } else if (!iosDevice.checkiOSDevice(device_udid)) {
+                    checkSelendroid(androidCaps);
+                    driver = new AndroidDriver<>(appiumMan.getAppiumUrl(), androidCaps);
+                }
+            } else {
+                checkSelendroid(androidCaps);
+                driver = new AndroidDriver<>(appiumMan.getAppiumUrl(), androidCaps);
+            }
+        }
+    }
+
+    public DesiredCapabilities checkSelendroid(DesiredCapabilities androidCaps) {
+        int android_api = 0;
+        try {
+            String deviceAPI = androidDevice.getDevices().get(device_udid);
+            android_api = Integer.parseInt(deviceAPI);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        System.out.println("Android API Level::" + android_api);
+        if (android_api <= 16) {
+            androidCaps.setCapability(MobileCapabilityType.AUTOMATION_NAME, "Selendroid");
+        }
+        return androidCaps;
+    }
+
+    public void startLogResults(String methodName)
+        throws FileNotFoundException, FileNotFoundException {
         if (driver.toString().split("\\(")[0].trim().equals("AndroidDriver:  on LINUX")) {
             System.out.println("Starting ADB logs" + device_udid);
             logEntries = driver.manage().logs().get("logcat").filter(Level.ALL);
@@ -222,9 +340,9 @@ public class AppiumParallelTest extends TestListenerAdapter implements ITestList
                 log_file_writer.println(logEntries);
                 log_file_writer.flush();
                 ExtentTestManager.getTest().log(LogStatus.INFO, result.getMethod().getMethodName(),
-                    "ADBLogs:: <a href=" + System.getProperty("user.dir") + "/target/adblogs/"
-                        + device_udid.replaceAll("\\W", "_") + "__" + result.getMethod()
-                        .getMethodName() + ".txt" + ">AdbLogs</a>");
+                    "ADBLogs:: <a href=" + CI_BASE_URI + "/target/adblogs/" + device_udid
+                        .replaceAll("\\W", "_") + "__" + result.getMethod().getMethodName() + ".txt"
+                        + ">AdbLogs</a>");
                 System.out.println(driver.getSessionId() + ": Saving device log - Done.");
             }
 
@@ -254,20 +372,20 @@ public class AppiumParallelTest extends TestListenerAdapter implements ITestList
                     ExtentTestManager.getTest()
                         .log(LogStatus.INFO, result.getMethod().getMethodName(),
                             "Snapshot below: " + ExtentTestManager.getTest().addScreenCapture(
-                                System.getProperty("user.dir") + "/target/screenshot/android/"
-                                    + device_udid.replaceAll("\\W", "_") + "/" + className + "/"
-                                    + result.getMethod().getMethodName() + "/"
-                                    + screenShotNameWithTimeStamp + deviceModel + "_failed_"
-                                    + result.getMethod().getMethodName() + "_framed.png"));
+                                CI_BASE_URI + "/target/screenshot/android/" + device_udid
+                                    .replaceAll("\\W", "_") + "/" + className + "/" + result
+                                    .getMethod().getMethodName() + "/" + screenShotNameWithTimeStamp
+                                    + deviceModel + "_failed_" + result.getMethod().getMethodName()
+                                    + "_framed.png"));
                 } else {
                     ExtentTestManager.getTest()
                         .log(LogStatus.INFO, result.getMethod().getMethodName(),
                             "Snapshot below: " + ExtentTestManager.getTest().addScreenCapture(
-                                System.getProperty("user.dir") + "/target/screenshot/android/"
-                                    + device_udid.replaceAll("\\W", "_") + "/" + className + "/"
-                                    + result.getMethod().getMethodName() + "/"
-                                    + screenShotNameWithTimeStamp + deviceModel + "_" + result
-                                    .getMethod().getMethodName() + "_failed.png"));
+                                CI_BASE_URI + "/target/screenshot/android/" + device_udid
+                                    .replaceAll("\\W", "_") + "/" + className + "/" + result
+                                    .getMethod().getMethodName() + "/" + screenShotNameWithTimeStamp
+                                    + deviceModel + "_" + result.getMethod().getMethodName()
+                                    + "_failed.png"));
                 }
 
 
@@ -282,20 +400,20 @@ public class AppiumParallelTest extends TestListenerAdapter implements ITestList
                     ExtentTestManager.getTest()
                         .log(LogStatus.INFO, result.getMethod().getMethodName(),
                             "Snapshot below: " + ExtentTestManager.getTest().addScreenCapture(
-                                System.getProperty("user.dir") + "/target/screenshot/iOS/"
-                                    + device_udid.replaceAll("\\W", "_") + "/" + className + "/"
-                                    + result.getMethod().getMethodName() + "/"
-                                    + screenShotNameWithTimeStamp + deviceModel + "_failed_"
-                                    + result.getMethod().getMethodName() + "_framed.png"));
+                                CI_BASE_URI + "/target/screenshot/iOS/" + device_udid
+                                    .replaceAll("\\W", "_") + "/" + className + "/" + result
+                                    .getMethod().getMethodName() + "/" + screenShotNameWithTimeStamp
+                                    + deviceModel + "_failed_" + result.getMethod().getMethodName()
+                                    + "_framed.png"));
                 } else {
                     ExtentTestManager.getTest()
                         .log(LogStatus.INFO, result.getMethod().getMethodName(),
                             "Snapshot below: " + ExtentTestManager.getTest().addScreenCapture(
-                                System.getProperty("user.dir") + "/target/screenshot/iOS/"
-                                    + device_udid.replaceAll("\\W", "_") + "/" + className + "/"
-                                    + result.getMethod().getMethodName() + "/"
-                                    + screenShotNameWithTimeStamp + deviceModel + "_" + result
-                                    .getMethod().getMethodName() + "_failed.png"));
+                                CI_BASE_URI + "/target/screenshot/iOS/" + device_udid
+                                    .replaceAll("\\W", "_") + "/" + className + "/" + result
+                                    .getMethod().getMethodName() + "/" + screenShotNameWithTimeStamp
+                                    + deviceModel + "_" + result.getMethod().getMethodName()
+                                    + "_failed.png"));
                 }
 
             }
@@ -305,9 +423,9 @@ public class AppiumParallelTest extends TestListenerAdapter implements ITestList
                 log_file_writer.println(logEntries);
                 log_file_writer.flush();
                 ExtentTestManager.getTest().log(LogStatus.INFO, result.getMethod().getMethodName(),
-                    "ADBLogs:: <a href=" + System.getProperty("user.dir") + "/target/adblogs/"
-                        + device_udid.replaceAll("\\W", "_") + "__" + result.getMethod()
-                        .getMethodName() + ".txt" + ">AdbLogs</a>");
+                    "ADBLogs:: <a href=" + CI_BASE_URI + "/target/adblogs/" + device_udid
+                        .replaceAll("\\W", "_") + "__" + result.getMethod().getMethodName() + ".txt"
+                        + ">AdbLogs</a>");
                 System.out.println(driver.getSessionId() + ": Saving device log - Done.");
             }
 
@@ -368,16 +486,7 @@ public class AppiumParallelTest extends TestListenerAdapter implements ITestList
         androidCapabilities.setCapability(AndroidMobileCapabilityType.APP_PACKAGE,
             prop.getProperty("APP_PACKAGE"));
         androidCapabilities.setCapability("browserName", "");
-        int android_api = Integer.parseInt(androidDevice.deviceOS(device_udid));
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-        System.out.println("Android API Level::" + android_api);
-        if (android_api <= 16) {
-            androidCapabilities.setCapability(MobileCapabilityType.AUTOMATION_NAME, "Selendroid");
-        }
+        checkSelendroid(androidCapabilities);
         androidCapabilities
             .setCapability(MobileCapabilityType.APP, prop.getProperty("ANDROID_APP_PATH"));
         androidCapabilities.setCapability(MobileCapabilityType.UDID, device_udid);
@@ -445,61 +554,23 @@ public class AppiumParallelTest extends TestListenerAdapter implements ITestList
         return Toolkit.getDefaultToolkit().getImage(url);
     }
 
-    public void screenShotAndFrame(String methodName, String device, String className) {
-        try {
-            File framePath =
-                new File(System.getProperty("user.dir") + "/src/test/resources/frames/");
-            File[] files1 = framePath.listFiles();
-            if (framePath.exists()) {
-                for (int i = 0; i < files1.length; i++) {
-                    if (files1[i].isFile()) { //this line weeds out other directories/folders
-                        Path p = Paths.get(files1[i].toString());
-                        String fileName = p.getFileName().toString().toLowerCase();
-
-                        if (deviceModel.toString().toLowerCase()
-                            .contains(fileName.split(".png")[0].toLowerCase()))
-
-                        {
-
-                            try {
-                                String deviceFrame = files1[i].toString();
-                                String screenToBeFramed = System.getProperty("user.dir") +
-                                    "/target/screenshot/" + device + "/" + device_udid
-                                    .replaceAll("\\W", "_") + "/" + className + "/" + methodName
-                                    + "/" + deviceModel + "_" + methodName + "_failed.png";
-                                String framedScreenShot =
-                                    System.getProperty("user.dir") + "/target/screenshot/" + device
-                                        + "/" + device_udid.replaceAll("\\W", "_") + "/" + className
-                                        + "/" + methodName + "/" + deviceModel + "_failed_"
-                                        + methodName + "_framed.png";
-                                imageUtils.wrapDeviceFrames(deviceFrame, screenToBeFramed,
-                                    framedScreenShot);
-                                File deleteActualImage = new File(screenToBeFramed);
-                                deleteActualImage.delete();
-                                break;
-                            } catch (InterruptedException e) {
-                                e.printStackTrace();
-                            } catch (IM4JavaException e) {
-                                e.printStackTrace();
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-            System.out.println("Resource Directory was not found");
-        }
-    }
-
     public void captureScreenshot(String methodName, String device, String className)
         throws IOException, InterruptedException {
+        String context = getDriver().getContext();
+        boolean contextChanged = false;
+        if (getDriver().toString().split(":")[0].trim().equals("AndroidDriver") && !context
+            .equals("NATIVE_APP")) {
+            getDriver().context("NATIVE_APP");
+            contextChanged = true;
+        }
         scrFile = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
+        if (contextChanged) {
+            getDriver().context(context);
+        }
         FileUtils.copyFile(scrFile, new File(
-            System.getProperty("user.dir") + "/target/screenshot/" + device + "/" + device_udid
-                .replaceAll("\\W", "_") + "/" + className + "/" + methodName + "/" + deviceModel
-                + "_" + methodName + "_failed" + ".png"));
+            CI_BASE_URI + "/target/screenshot/" + device + "/" + device_udid.replaceAll("\\W", "_")
+                + "/" + className + "/" + methodName + "/" + deviceModel + "_" + methodName
+                + "_failed" + ".png"));
         Thread.sleep(3000);
     }
 
@@ -507,12 +578,20 @@ public class AppiumParallelTest extends TestListenerAdapter implements ITestList
         ExtentTestManager.logger(message);
     }
 
-    public void captureScreenShot(String screenShotName, int status, String screenClassName)
-        throws IOException, InterruptedException {
+    public void captureScreenShot(String screenShotName, int status, String className,
+            String methodName) throws IOException, InterruptedException {
+        String context = getDriver().getContext();
+        boolean contextChanged = false;
+        if (getDriver().toString().split(":")[0].trim().equals("AndroidDriver")
+                && !context.equals("NATIVE_APP")) {
+            getDriver().context("NATIVE_APP");
+            contextChanged = true;
+        }
         File scrFile = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
+        if (contextChanged) {
+            getDriver().context(context);
+        }
         StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
-        String methodName = screenShotName;
-        String className = screenClassName;
         screenShotNameWithTimeStamp = currentDateAndTime();
         if (driver.toString().split(":")[0].trim().equals("AndroidDriver")) {
             String androidModel =
@@ -527,30 +606,23 @@ public class AppiumParallelTest extends TestListenerAdapter implements ITestList
         }
     }
 
+    public void captureScreenShot(String screenShotName, int status, String screenClassName)
+        throws IOException, InterruptedException {
+        captureScreenShot(screenShotName, status, screenClassName, screenShotName);
+    }
+
     public void captureScreenShot(String screenShotName) throws InterruptedException, IOException {
-        File scrFile = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
-        StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
         String methodName = new Exception().getStackTrace()[1].getMethodName();
         String className = new Exception().getStackTrace()[1].getClassName();
-        screenShotNameWithTimeStamp = currentDateAndTime();
-        if (driver.toString().split(":")[0].trim().equals("AndroidDriver")) {
-            String androidModel =
-                screenShotNameWithTimeStamp + androidDevice.getDeviceModel(device_udid);
-            screenShotAndFrame(screenShotName, 1, scrFile, methodName, className, androidModel,
-                "android");
-        } else if (driver.toString().split(":")[0].trim().equals("IOSDriver")) {
-            String iosModel = screenShotNameWithTimeStamp + iosDevice
-                .getIOSDeviceProductTypeAndVersion(device_udid);
-            screenShotAndFrame(screenShotName, 1, scrFile, methodName, className, iosModel, "iOS");
-        }
+        captureScreenShot(screenShotName, 1, className, methodName);
     }
 
     public void screenShotAndFrame(String screenShotName, int status, File scrFile,
         String methodName, String className, String model, String platform) {
         String failedScreen =
             System.getProperty("user.dir") + "/target/screenshot/" + platform + "/" + device_udid
-                .replaceAll("\\W", "_") + "/" + className + "/" + methodName + "/" + deviceModel
-                + "_" + methodName + "_failed" + ".png";
+                .replaceAll("\\W", "_") + "/" + className + "/" + methodName + "/"
+                + screenShotNameWithTimeStamp + deviceModel + "_" + methodName + "_failed" + ".png";
         String capturedScreen =
             System.getProperty("user.dir") + "/target/screenshot/" + platform + "/" + device_udid
                 .replaceAll("\\W", "_") + "/" + className + "/" + methodName + "/" + screenShotName
@@ -560,9 +632,9 @@ public class AppiumParallelTest extends TestListenerAdapter implements ITestList
                 .replaceAll("\\W", "_") + "/" + className + "/" + methodName + "/" + model + "_"
                 + screenShotName + "_results.png";
         String framedFailedScreen =
-            System.getProperty("user.dir") + "/target/screenshot/" + platform +
-                "/" + device_udid.replaceAll("\\W", "_") + "/" + className + "/" + methodName + "/"
-                + model + "_failed_" + methodName + "_framed.png";
+            System.getProperty("user.dir") + "/target/screenshot/" + platform + "/" + device_udid
+                .replaceAll("\\W", "_") + "/" + className + "/" + methodName + "/" + model
+                + "_failed_" + methodName + "_framed.png";
 
         try {
             File framePath =
