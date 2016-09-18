@@ -23,13 +23,13 @@ import io.appium.java_client.remote.MobileCapabilityType;
 public class UserBaseTest extends AppiumParallelTest {
     JSonParser jSonParser = new JSonParser();
 
-    @BeforeMethod()
+    @BeforeMethod(alwaysRun = true)
     public void startApp(Method name) throws Exception {
 	driver = startAppiumServerInParallel(name.getName(), androidNative());
 	startLogResults(name.getName());
     }
 
-    @AfterMethod()
+    @AfterMethod(alwaysRun = true)
     public void killServer(ITestResult result) throws InterruptedException, IOException {
 	endLogTestResults(result);
 	getDriver().quit();
@@ -40,17 +40,19 @@ public class UserBaseTest extends AppiumParallelTest {
 	return driver;
     }
 
-    @BeforeClass()
+    @BeforeClass(alwaysRun = true)
     public void beforeClass() throws Exception {
 	System.out.println("Before Class called" + Thread.currentThread().getId());
 	System.out.println(getClass().getName());
-	startAppiumServer(getClass().getSimpleName());
+	// Moving the method inside the dependency in the next release
+	// startAppiumServer(getClass().getSimpleName());
     }
 
-    @AfterClass()
+    @AfterClass(alwaysRun = true)
     public void afterClass() throws InterruptedException, IOException {
 	System.out.println("After Class" + Thread.currentThread().getId());
-	killAppiumServer();
+	// Moving the method inside the dependency in the next release
+	// killAppiumServer();
     }
 
     public void getUserName() {
@@ -79,10 +81,9 @@ public class UserBaseTest extends AppiumParallelTest {
 	androidCapabilities.setCapability(MobileCapabilityType.DEVICE_NAME, "Android");
 	androidCapabilities.setCapability(MobileCapabilityType.PLATFORM_VERSION, "5.X");
 	androidCapabilities.setCapability(AndroidMobileCapabilityType.APP_ACTIVITY, prop.getProperty("APP_ACTIVITY"));
-	androidCapabilities.setCapability(AndroidMobileCapabilityType.APP_PACKAGE, prop.getProperty("APP_PACKAGE"));
-	androidCapabilities.setCapability("browserName", "");
 	androidCapabilities.setCapability(MobileCapabilityType.APP,
 		new File(prop.getProperty("ANDROID_APP_PATH")).getAbsolutePath());
+	androidCapabilities.setCapability("browserName", "");
 	androidCapabilities.setCapability(MobileCapabilityType.UDID, device_udid);
 	return androidCapabilities;
     }
