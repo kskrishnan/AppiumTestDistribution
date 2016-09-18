@@ -4,12 +4,12 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.github.kskrishnan</groupId>
     <artifactId>AppiumTestDistribution</artifactId>
-    <version>1.0.2</version>
+    <version>1.0.1</version>
     <packaging>jar</packaging>
 
     <name>AppiumTestDistribution</name>
     <description>"A tool run Android and iOS test in parallel across devices"</description>
-    <url>https://github.com/saikrishna321/AppiumTestDistribution</url>
+    <url>https://github.com/kskrishnan/AppiumTestDistribution</url>
 
     <licenses>
         <license>
@@ -19,8 +19,8 @@
     </licenses>
 
     <scm>
-        <url>https://github.com/saikrishna321/AppiumTestDistribution.git</url>
-        <connection>scm:git:git@github.com:saikrishna321/AppiumTestDistribution.git</connection>
+        <url>https://github.com/kskrishnan/AppiumTestDistribution.git</url>
+        <connection>scm:git:git@github.com:kskrishnan/AppiumTestDistribution.git</connection>
     </scm>
 
     <developers>
