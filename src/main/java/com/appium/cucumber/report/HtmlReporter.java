@@ -1,14 +1,13 @@
 package com.appium.cucumber.report;
 
+import net.masterthought.cucumber.Configuration;
+import net.masterthought.cucumber.ReportBuilder;
+import org.apache.velocity.exception.VelocityException;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-
-import org.apache.velocity.exception.VelocityException;
-
-import net.masterthought.cucumber.Configuration;
-import net.masterthought.cucumber.ReportBuilder;
 
 public class HtmlReporter {
     public File reportOutputDirectory = new File(System.getProperty("user.dir") + "/target/");
